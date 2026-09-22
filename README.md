@@ -8,8 +8,10 @@ github_latest.sh [<options>] <Github repo URL>
 ## Options
 * `-h` Show help and exit
 * `-s` Simmulate
+* `-q` Don't print anything to STDERR unless there is an error
 * `-d` Download file to given dir; downloads to current dir if ommited
 * `-z` Get ZIP instead of tarball
+* `-C` Do NOT overwrite existing tarball, write <filename>.1 (or .2 …)
 * `-t` Use topmost (usually latest) tag instead of release
 * `-n` Print out the latest release tag name and exit
 * `-N` Print out the latest release tarball or zip file name and exit

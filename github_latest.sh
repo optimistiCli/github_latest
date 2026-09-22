@@ -4,17 +4,22 @@ function usage() {
 cat <<EOF
 Downloads the latest release tarball from a GitHub repo
 
-Usage: $(basename "$0") [-h] [-n|-N|-j] [-z | -p <pattern> | -P <pattern>] [-t] [-d <dir>] [-s] <Github repo URL>
+Usage:
+  $(basename "$0") [-h] [-q] [-n|-N|-j] [-z | -p <pattern> | -P <pattern>]
+  $(basename "$0" | tr -c [:space:] ' ' ) [-t] [-d <dir>] [-C] [-s] <Github repo URL>
 
+Options:
   -h Show help and exit
   -n Print out the latest release tag name and exit
   -N Print out the latest release tarball or zip file name and exit
   -j Print out JSON about the latest release and exit
   -z Get ZIP instead of tarball
+  -q Don't print anything to STDERR unless there is an error
   -p Get asset with filename matching regex instead of tarball
   -P Get asset with entire filename matching regex instead of tarball
   -t Use topmost (usually latest) tag instead of release
   -d Download file to given dir, to current dir if ommited
+  -C Do NOT overwrite existing tarball, write <filename>.1 (or .2 …)
   -s Simmulate
 
 EOF
@@ -32,13 +37,15 @@ for APP in jq curl; do
     fi
 done
 
-while getopts ":p:P:d:szthnNj" opt; do
+while getopts ":p:P:d:szthnNjqC" opt; do
     case ${opt} in
         p ) ASSET_RE="$OPTARG";;
         P ) ASSET_RE="^${OPTARG}$";;
         d ) OUT_DIR="$OPTARG";;
         s ) SIMMULATE='echo -n';;
         z ) BALL_TYPE='zip';;
+        C ) NO_CLOBBER='--no-clobber';;
+        q ) QUIET='-s';;
         t ) USE_TAG=1;;
         n ) NAME_ONLY=1;;
         N ) FILE_NAME_ONLY=1;;
@@ -150,9 +157,9 @@ fi
 
 if [ -n "$FILE_NAME_ONLY" ]; then
     FILE_NAME="$(
-        curl -sL \
+        curl -L $QUIET \
             -X HEAD \
-            -w '%{header_json}\n' \
+            -w '%{header_json}' \
             "$FINAL_URL" \
         | jq -r '
             first(
@@ -173,16 +180,22 @@ if [ -n "$FILE_NAME_ONLY" ]; then
         brag_and_exit "No file name"
     fi
 else
-    echo -e "Tag: $TAG_NAME\nSource URL: $FINAL_URL\nDestination dir: $OUT_DIR"
-    $SIMMULATE curl \
+    if [ -z "$QUIET" ]; then
+        echo -e "Tag: $TAG_NAME\nSource URL: $FINAL_URL\nDestination dir: $OUT_DIR"
+    fi
+    # Pre 8.6 curl fails to prepend filename_effective with dir in case of
+    # --remote-header-name and --output-dir either without --no-clobber or
+    # if target file doesn't exist or if it is overwrittn with --clobber
+    $SIMMULATE curl $QUIET ${NO_CLOBBER:-'--clobber'} \
         -LJO \
         --create-dirs \
         --output-dir "$OUT_DIR" \
-        -w "${OUT_DIR}/%{filename_effective}" \
-        "$FINAL_URL"
+        -w '%{filename_effective}' \
+        "$FINAL_URL" \
+    | sed -E '/^curl.*--output-dir/!s%^(.*/)*%'"${OUT_DIR}/%"
 
     if [ $? -eq 0 ]; then
-        echo '' >&2
+        [ -t 0 ] && echo ''
     else
         brag_and_exit "Download failed"
     fi
